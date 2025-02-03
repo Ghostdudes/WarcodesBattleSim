@@ -40,6 +40,8 @@ def perform_attack(attacker, defender, defender_hp):
     defender_agility_roll = roll_die(defender_agility)
     if defender["Heartstone"]:
         defender_agility_roll -= 1
+    if defender.get("Eagle Stone", False): 
+        defender_agility_roll -= 1  
 
     primary_accuracy_roll = roll_die(attacker_primary_accuracy)
     
