@@ -465,8 +465,8 @@ class BattleSimulator:
 
         results = simulate_battle(creature1, creature2)
 
-        win_rate1 = results[creature1['Name']] / 10000 * 100
-        win_rate2 = results[creature2['Name']] / 10000 * 100
+        win_rate1 = results[creature1['Name']] / 25000 * 100
+        win_rate2 = results[creature2['Name']] / 25000 * 100
 
         self.result_label.config(
             text=f"{creature1['Name']}: {win_rate1:.2f}% wins vs {creature2['Name']}: {win_rate2:.2f}% wins",
