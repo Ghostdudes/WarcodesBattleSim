@@ -60,15 +60,9 @@ def perform_attack(attacker, defender, defender_hp):
                 primary_dice += attacker["Large Shard"] + attacker["Flareheart"]
 
                 if attack_type in defender["Weakness"]:
-                    primary_dice += 1
-                    if defender.get("Earthbane", False):
-                        primary_dice += 1
-                    if attacker.get("Wrathstone", False):
-                        primary_dice += 1
+                    primary_dice += 1 + defender.get("Earthbane", False) + attacker.get("Wrathstone", False)
                 elif attack_type in defender["Resistance"]:
-                    primary_dice -= 1
-                    if defender.get("Aegis Stone", False):
-                        primary_dice -= 1
+                    primary_dice += -1 - defender.get("Aegis Stone", False)
 
         if primary_dice > 0:
             primary_dice = max(1, primary_dice)
@@ -95,17 +89,12 @@ def perform_attack(attacker, defender, defender_hp):
         for attack_type in attacker["Secondary Attack Type"]:
             if attack_type != "NA":
                 secondary_dice = 1
-                secondary_dice += attacker["Small Shard"] # Only Small Shard in secondary attack
-
+                secondary_dice += attacker["Small Shard"]
+                
                 if attack_type in defender["Weakness"]:
-                    secondary_dice += 1
-                    if defender.get("Earthbane", False):
-                        secondary_dice += 1
-
+                    secondary_dice += 1 + defender.get("Earthbane", False)
                 elif attack_type in defender["Resistance"]:
-                    secondary_dice -= 1
-                    if defender.get("Aegis Stone", False):
-                        secondary_dice -= 1
+                    secondary_dice += -1 - defender.get("Aegis Stone", False)
 
         if secondary_dice > 0:
             secondary_dice = max(1, secondary_dice)
