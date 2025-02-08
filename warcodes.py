@@ -78,34 +78,43 @@ def perform_attack(attacker, defender, defender_hp):
     secondary_accuracy_roll = roll_die(attacker_secondary_accuracy)
 
     
-    if attacker.get("Eagle Stone", False):
-      secondary_accuracy_roll_2 = roll_die(attacker_secondary_accuracy)
-      secondary_accuracy_roll = max(secondary_accuracy_roll, secondary_accuracy_roll_2)
-
-    secondary_accuracy_roll += (1 if attacker["Small Eyestone"] else 0) + (2 if attacker["Sword Amulet"] else 0)
-
-    if secondary_accuracy_roll >= defender_agility_roll:
-        secondary_dice = 0
-        for attack_type in attacker["Secondary Attack Type"]:
-            if attack_type != "NA":
-                secondary_dice = 1
-                secondary_dice += attacker["Small Shard"]
-                
-                if attack_type in defender["Weakness"]:
-                    secondary_dice += 1 + defender.get("Earthbane", False)
-                elif attack_type in defender["Resistance"]:
-                    secondary_dice += -1 - defender.get("Aegis Stone", False)
-
-        if secondary_dice > 0:
-            secondary_dice = max(1, secondary_dice)
-            secondary_damage = sum(roll_die(attacker["Secondary Damage"]) for _ in range(secondary_dice))
-
-            if attacker["Small Shard"]:
-                secondary_damage -= 3
-
-            defender_hp -= max(0, secondary_damage)
-
-    return defender_hp
+    defender_agility_roll_secondary = roll_die(defender_agility)
+        if defender["Heartstone"]:
+            defender_agility_roll_secondary -= 1
+        if defender.get("Eagle Stone", False):
+            defender_agility_roll_secondary -= 1
+    
+    
+        secondary_accuracy_roll = roll_die(attacker_secondary_accuracy)
+    
+        if attacker.get("Eagle Stone", False):
+            secondary_accuracy_roll_2 = roll_die(attacker_secondary_accuracy)
+            secondary_accuracy_roll = max(secondary_accuracy_roll, secondary_accuracy_roll_2)
+    
+        secondary_accuracy_roll += (1 if attacker["Small Eyestone"] else 0) + (2 if attacker["Sword Amulet"] else 0)
+    
+        if secondary_accuracy_roll >= defender_agility_roll_secondary:
+            secondary_dice = 0
+            for attack_type in attacker["Secondary Attack Type"]:
+                if attack_type != "NA":
+                    secondary_dice = 1
+                    secondary_dice += attacker["Small Shard"]
+    
+                    if attack_type in defender["Weakness"]:
+                        secondary_dice += 1 + defender.get("Earthbane", False)
+                    elif attack_type in defender["Resistance"]:
+                        secondary_dice += -1 - defender.get("Aegis Stone", False)
+    
+            if secondary_dice > 0:
+                secondary_dice = max(1, secondary_dice)
+                secondary_damage = sum(roll_die(attacker["Secondary Damage"]) for _ in range(secondary_dice))
+    
+                if attacker["Small Shard"]:
+                    secondary_damage -= 3
+    
+                defender_hp -= max(0, secondary_damage)
+    
+        return defender_hp
 
     #######################################secondary
     if roll_die(attacker_secondary_accuracy) >= roll_die(defender_agility):
