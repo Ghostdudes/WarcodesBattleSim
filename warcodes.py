@@ -64,9 +64,8 @@ def perform_attack(attacker, defender, defender_hp):
                 elif attack_type in defender["Resistance"]:
                     primary_dice += -1 - defender.get("Aegis Stone", False)
 
-        if primary_dice > 0:
-            primary_dice = max(1, primary_dice)
-            primary_damage = sum(roll_die(attacker["Primary Damage"]) for _ in range(primary_dice))
+        primary_dice = max(1, primary_dice)
+        primary_damage = sum(roll_die(attacker["Primary Damage"]) for _ in range(primary_dice))
 
             if attacker["Large Shard"]:
                 primary_damage -= 3
@@ -105,9 +104,8 @@ def perform_attack(attacker, defender, defender_hp):
                     elif attack_type in defender["Resistance"]:
                         secondary_dice += -1 - defender.get("Aegis Stone", False)
     
-            if secondary_dice > 0:
-                secondary_dice = max(1, secondary_dice)
-                secondary_damage = sum(roll_die(attacker["Secondary Damage"]) for _ in range(secondary_dice))
+            secondary_dice = max(1, secondary_dice)
+            secondary_damage = sum(roll_die(attacker["Secondary Damage"]) for _ in range(secondary_dice))
     
                 if attacker["Small Shard"]:
                     secondary_damage -= 3
