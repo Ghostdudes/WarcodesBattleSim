@@ -67,10 +67,10 @@ def perform_attack(attacker, defender, defender_hp):
         primary_dice = max(1, primary_dice)
         primary_damage = sum(roll_die(attacker["Primary Damage"]) for _ in range(primary_dice))
 
-            if attacker["Large Shard"]:
-                primary_damage -= 3
-            if attacker["Vitaflare"]:
-                primary_damage -= 2
+        if attacker["Large Shard"]:
+            primary_damage -= 3
+        if attacker["Vitaflare"]:
+            primary_damage -= 2
 
             defender_hp -= max(0, primary_damage)
 
@@ -107,8 +107,8 @@ def perform_attack(attacker, defender, defender_hp):
             secondary_dice = max(1, secondary_dice)
             secondary_damage = sum(roll_die(attacker["Secondary Damage"]) for _ in range(secondary_dice))
     
-                if attacker["Small Shard"]:
-                    secondary_damage -= 3
+            if attacker["Small Shard"]:
+                secondary_damage -= 3
     
                 defender_hp -= max(0, secondary_damage)
     
