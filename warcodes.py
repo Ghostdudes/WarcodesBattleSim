@@ -5,138 +5,161 @@ import json
 import os
 from PIL import Image, ImageTk
 
+ITEM_MODIFIERS = {
+    "Large Eyestone": {"primary_accuracy_modifier": 1},
+    "Eagle Stone": {"accuracy_roll_extra": True, "defender_agility_modifier": -1},
+    "Large Shard": {"primary_dice_increase": 1, "primary_damage_reduction": -3},
+    "Flareheart": {"primary_dice_increase": 1},
+    "Wrathstone": {"primary_weakness_dice_increase_ifattack": 1},
+    "Vitaflare": {"primary_damage_reduction": -2},
+    "Small Eyestone": {"secondary_accuracy_modifier": 1},
+    "Sword Amulet": {"secondary_accuracy_modifier": 2},
+    "Small Shard": {"secondary_dice_increase": 1, "secondary_damage_reduction": -3},
+    "Earthbane": {"weakness_dice_increase_ifdefend": 1},
+    "Aegis Stone": {"resistance_dice_reduction_ifdefend": 1},
+    "Heartstone": {"defender_agility_modifier": -1}
+}
+
 def roll_die(sides):
     return random.randint(1, sides)
 
+def apply_item_effects(creature: dict, is_attacker: bool) -> dict:
+    """Applies item effects and returns modifiers."""
+    modifiers = {
+        "primary_accuracy_modifier": 0,
+        "secondary_accuracy_modifier": 0,
+        "primary_dice_increase": 0,
+        "secondary_dice_increase": 0,
+        "primary_damage_reduction": 0,
+        "secondary_damage_reduction": 0,
+        "primary_weakness_dice_increase_ifattack": 0,  
+        "weakness_dice_increase_ifdefend": 0,
+        "resistance_dice_reduction_ifdefend": 0,
+        "defender_agility_modifier": 0,
+        "accuracy_roll_extra": False  
+    }
+
+    for item, equipped in creature.items():  
+        if equipped and item in ITEM_MODIFIERS:
+            item_effects = ITEM_MODIFIERS[item]
+            for effect, value in item_effects.items():
+                if effect in modifiers:
+                    modifiers[effect] += value  
+                elif effect == "accuracy_roll_extra": 
+                    modifiers[effect] = modifiers[effect] or value
+    return modifiers
+
+def calculate_primary_damage(attacker: dict, defender: dict, attacker_modifiers: dict, defender_modifiers: dict) -> int:
+    """Calculates damage for the primary attack."""
+    attack_types = attacker["Primary Attack Type"]
+    defender_agility_roll = roll_die(defender["Agility"]) + defender_modifiers.get("defender_agility_modifier", 0)
+
+    accuracy_rolls = [roll_die(attacker["Primary Accuracy"])]
+    if attacker_modifiers.get("accuracy_roll_extra", False):
+        accuracy_rolls.append(roll_die(attacker["Primary Accuracy"]))
+    final_accuracy_roll = max(accuracy_rolls) + attacker_modifiers["primary_accuracy_modifier"]
+
+    if final_accuracy_roll < defender_agility_roll:
+        return 0  # Attack missed
+
+    dice_count = 0
+    for attack_type in attack_types:
+        if attack_type != "NA":
+            dice_count = 2 + attacker_modifiers["primary_dice_increase"]
+            if attack_type in defender.get("Weakness", []):
+                dice_count += 1
+                dice_count += attacker_modifiers.get("primary_weakness_dice_increase_ifattack", 0) #wrathstone
+                dice_count += defender_modifiers.get("weakness_dice_increase_ifdefend", 0)  # earthbane
+            elif attack_type in defender.get("Resistance", []):
+                dice_count -= 1
+                dice_count -= defender_modifiers.get("resistance_dice_reduction_ifdefend", 0)  # aegis
+            break
+
+    dice_count = max(1, dice_count)
+    damage = sum(roll_die(attacker["Primary Damage"]) for _ in range(dice_count))
+    damage += attacker_modifiers["primary_damage_reduction"]
+
+    return max(0, damage)  
+def calculate_secondary_damage(attacker: dict, defender: dict, attacker_modifiers: dict, defender_modifiers: dict)-> int:
+    """Calculates damage for the secondary attack"""
+    attack_types = attacker["Secondary Attack Type"]
+    defender_agility_roll = roll_die(defender["Agility"]) + defender_modifiers.get("defender_agility_modifier", 0)
+
+    accuracy_rolls = [roll_die(attacker["Secondary Accuracy"])]
+    if attacker_modifiers.get("accuracy_roll_extra", False):
+        accuracy_rolls.append(roll_die(attacker["Secondary Accuracy"]))
+
+    final_accuracy_roll = max(accuracy_rolls) + attacker_modifiers["secondary_accuracy_modifier"]
+
+    if final_accuracy_roll < defender_agility_roll:
+        return 0
+
+    dice_count = 0
+    for attack_type in attack_types:
+        if attack_type != "NA":
+            dice_count = 2 + attacker_modifiers["secondary_dice_increase"]
+            if attack_type in defender.get("Weakness",[]):
+                dice_count += 1
+                dice_count += defender_modifiers.get("weakness_dice_increase_ifdefend", 0)
+            elif attack_type in defender.get("Resistance", []):
+                dice_count -= 1
+                dice_count -= defender_modifiers.get("resistance_dice_reduction_ifdefend", 0)
+            break
+
+    dice_count = max(1, dice_count)
+    damage = sum(roll_die(attacker["Secondary Damage"]) for _ in range(dice_count))
+    damage += attacker_modifiers["secondary_damage_reduction"]
+
+    return max(0, damage)
+
+def perform_attack(attacker, defender, defender_hp):
+    """Performs a single attack round (both primary and secondary)"""
+
+    attacker_modifiers = apply_item_effects(attacker, True)
+    defender_modifiers = apply_item_effects(defender, False)
+
+    primary_damage = calculate_primary_damage(attacker, defender, attacker_modifiers, defender_modifiers)
+    defender_hp -= primary_damage
+
+    if defender_hp <= 0:
+        return 0
+
+    secondary_damage = calculate_secondary_damage(attacker, defender, attacker_modifiers, defender_modifiers)
+    defender_hp -= secondary_damage
+
+    return defender_hp
+
 def simulate_battle(creature1, creature2):
-    results = {creature1['Name']: 0, creature2['Name']: 0}   #################actual sim code
+    results = {creature1['Name']: 0, creature2['Name']: 0}  #################actual sim code
+
+    if creature1['Name'] == creature2['Name']:
+      results = {creature1['Name']: 0, creature2['Name'] + "again": 0}
 
     for _ in range(25000): #25k sims, used this for the bot
-        creature1_hp = creature1['HP']
-        creature2_hp = creature2['HP']
+        temp_creature1 = creature1.copy() 
+        temp_creature2 = creature2.copy()
+        creature1_hp = temp_creature1['HP']
+        creature2_hp = temp_creature2['HP']
 
         while creature1_hp > 0 and creature2_hp > 0:
-           
-            creature2_hp = perform_attack(creature1, creature2, creature2_hp)
+
+            creature2_hp = perform_attack(temp_creature1, temp_creature2, creature2_hp)
 
             if creature2_hp <= 0:
                 results[creature1['Name']] += 1 ###just as in game, defender goes first, when hp hits 0, opponent gets 1 pt, 10000x then find percentage of points
-                break  
+                break
 
-            
-            creature1_hp = perform_attack(creature2, creature1, creature1_hp)
+
+            creature1_hp = perform_attack(temp_creature2, temp_creature1, creature1_hp)
 
             if creature1_hp <= 0:
+              if creature1['Name'] == creature2['Name']:
+                results[creature2['Name'] + "again"] += 1
+              else:
                 results[creature2['Name']] += 1
-                break 
+              break
 
     return results
-
-def perform_attack(attacker, defender, defender_hp):
-    attacker_primary_accuracy = attacker["Primary Accuracy"]
-    attacker_secondary_accuracy = attacker["Secondary Accuracy"]
-    defender_agility = defender["Agility"]
-
-    defender_agility_roll = roll_die(defender_agility)
-    if defender["Heartstone"]:
-        defender_agility_roll -= 1
-    if defender.get("Eagle Stone", False): 
-        defender_agility_roll -= 1  
-
-    primary_accuracy_roll = roll_die(attacker_primary_accuracy)
-    
-    
-    if attacker.get("Eagle Stone", False):
-        primary_accuracy_roll_2 = roll_die(attacker_primary_accuracy)
-        primary_accuracy_roll = max(primary_accuracy_roll, primary_accuracy_roll_2)
-
-    primary_accuracy_roll += (1 if attacker["Large Eyestone"] else 0)
-
-    if primary_accuracy_roll >= defender_agility_roll:
-        primary_dice = 0
-        for attack_type in attacker["Primary Attack Type"]:
-            if attack_type != "NA":
-                primary_dice = 2
-                primary_dice += attacker["Large Shard"] + attacker["Flareheart"]
-
-                if attack_type in defender["Weakness"]:
-                    primary_dice += 1 + defender.get("Earthbane", False) + attacker.get("Wrathstone", False)
-                elif attack_type in defender["Resistance"]:
-                    primary_dice += -1 - defender.get("Aegis Stone", False)
-
-        primary_dice = max(1, primary_dice)
-        primary_damage = sum(roll_die(attacker["Primary Damage"]) for _ in range(primary_dice))
-
-        if attacker["Large Shard"]:
-            primary_damage -= 3
-        if attacker["Vitaflare"]:
-            primary_damage -= 2
-
-            defender_hp -= max(0, primary_damage)
-
-    secondary_accuracy_roll = roll_die(attacker_secondary_accuracy)
-
-    
-    defender_agility_roll_secondary = roll_die(defender_agility)
-    if defender["Heartstone"]:
-        defender_agility_roll_secondary -= 1
-    if defender.get("Eagle Stone", False):
-        defender_agility_roll_secondary -= 1
-    
-    
-        secondary_accuracy_roll = roll_die(attacker_secondary_accuracy)
-    
-        if attacker.get("Eagle Stone", False):
-            secondary_accuracy_roll_2 = roll_die(attacker_secondary_accuracy)
-            secondary_accuracy_roll = max(secondary_accuracy_roll, secondary_accuracy_roll_2)
-    
-        secondary_accuracy_roll += (1 if attacker["Small Eyestone"] else 0) + (2 if attacker["Sword Amulet"] else 0)
-    
-        if secondary_accuracy_roll >= defender_agility_roll_secondary:
-            secondary_dice = 0
-            for attack_type in attacker["Secondary Attack Type"]:
-                if attack_type != "NA":
-                    secondary_dice = 1
-                    secondary_dice += attacker["Small Shard"]
-    
-                    if attack_type in defender["Weakness"]:
-                        secondary_dice += 1 + defender.get("Earthbane", False)
-                    elif attack_type in defender["Resistance"]:
-                        secondary_dice += -1 - defender.get("Aegis Stone", False)
-    
-            secondary_dice = max(1, secondary_dice)
-            secondary_damage = sum(roll_die(attacker["Secondary Damage"]) for _ in range(secondary_dice))
-    
-            if attacker["Small Shard"]:
-                secondary_damage -= 3
-    
-                defender_hp -= max(0, secondary_damage)
-    
-        return defender_hp
-
-    #######################################secondary
-    if roll_die(attacker_secondary_accuracy) >= roll_die(defender_agility):
-        secondary_dice = 0
-        for attack_type in attacker["Secondary Attack Type"]:
-            if attack_type != "NA":
-                secondary_dice = 2
-                secondary_dice += attacker["Small Shard"]
-
-                if attack_type in defender["Weakness"]:
-                    secondary_dice += 1
-                elif attack_type in defender["Resistance"]:
-                    secondary_dice -= 1 + int(defender.get("Aegis Stone", False))
-
-        if secondary_dice > 0:
-            secondary_dice = max(1, secondary_dice)
-            secondary_damage = sum(roll_die(attacker["Secondary Damage"]) for _ in range(secondary_dice))
-
-            if attacker["Small Shard"]:
-                secondary_damage -= 3
-
-            defender_hp -= max(0, secondary_damage)
-
-    return defender_hp
 ####################################################end of attack phase#########################################################
 class MultiSelectPopup(tk.Toplevel):
     def __init__(self, parent, options, current_selections, callback):
@@ -163,7 +186,7 @@ class MultiSelectPopup(tk.Toplevel):
         self.destroy()
 
     def center_window(self, parent):
-        self.update_idletasks()  
+        self.update_idletasks()
         parent_x = parent.winfo_rootx()
         parent_y = parent.winfo_rooty()
         parent_width = parent.winfo_width()
@@ -210,7 +233,7 @@ class BattleSimulator:
             placeholder_photo = None
         if placeholder_photo:
             image_label = tk.Label(frame, image=placeholder_photo)
-            image_label.image = placeholder_photo  #####something to load if no mon photo 
+            image_label.image = placeholder_photo  #####something to load if no mon photo
             image_label.grid(row=25, column=0, columnspan=2, pady=5)
             fields["Image Label"] = image_label
         def add_field(label, row, field_type="entry", options=None):
@@ -238,12 +261,13 @@ class BattleSimulator:
             tk.Label(frame, text=label).grid(row=row, column=0, sticky="w")
             current_selections = []
 
-  
+
             selections_var = tk.StringVar(value=", ".join(current_selections))
             entry = tk.Entry(frame, textvariable=selections_var, state="readonly", width=20)
             entry.grid(row=row, column=1)
-            
- 
+
+
+
             fields[label + "_var"] = selections_var
 
             def open_popup():
@@ -255,11 +279,11 @@ class BattleSimulator:
                 nonlocal current_selections
                 current_selections = selections
                 selections_var.set(", ".join(selections))
-                fields[label] = current_selections  
+                fields[label] = current_selections
 
             button = tk.Button(frame, text="Select", command=open_popup)
             button.grid(row=row, column=2)
-            fields[label] = current_selections 
+            fields[label] = current_selections
 
         def save_creature():
             creature_data = self.parse_fields(fields)
@@ -272,12 +296,13 @@ class BattleSimulator:
             name = fields["Name"].get()
             if name in self.saved_creatures:
                 creature_data = self.saved_creatures[name]
-            
+
+
                 ################################Agility/accuracy needs to be conveted to be read V#############################################################
                 reverse_agility_mapping = {4: "★", 6: "★★", 8: "★★★"}
                 reverse_accuracy_mapping = {6: "low", 8: "medium", 10: "high"}
 
-   
+
                 for key, widget in fields.items():
                     if key == "Agility" and isinstance(widget, ttk.Combobox):
                         widget.set(reverse_agility_mapping.get(creature_data.get(key, 4), "★"))
@@ -312,11 +337,11 @@ class BattleSimulator:
                             fields["Image Label"].image = photo
                         except Exception as e:
                             print(f"Error loading image {image_path}: {e}")
-                        break 
-            else:
-                if "Image Label" in fields:
-                    fields["Image Label"].config(image=placeholder_photo)
-                    fields["Image Label"].image = placeholder_photo
+                        break
+                else:
+                    if "Image Label" in fields:
+                        fields["Image Label"].config(image=placeholder_photo)
+                        fields["Image Label"].image = placeholder_photo
 
         add_field("Name", 0)
         fields["Name"] = ttk.Combobox(frame, width=17, values=[])
@@ -356,13 +381,29 @@ class BattleSimulator:
         agility_mapping = {"★": 4, "★★": 6, "★★★": 8}
         accuracy_mapping = {"low": 6, "medium": 8, "high": 10}
 
+        
+        try:
+            hp = int(fields["HP"].get())
+        except ValueError:
+            hp = 0  
+
+        try:
+            primary_damage = int(fields["Primary Damage"].get()[1:])  # Remove "d" prefix
+        except (ValueError, IndexError):
+            primary_damage = 8 
+
+        try:
+            secondary_damage = int(fields["Secondary Damage"].get()[1:])
+        except (ValueError, IndexError):
+            secondary_damage = 4 
+        
         return {
             "Name": fields["Name"].get(),
-            "HP": int(fields["HP"].get()),
+            "HP": hp,
             "Agility": agility_mapping[fields["Agility"].get()],
-            "Primary Damage": int(fields["Primary Damage"].get()[1:]),
+            "Primary Damage": primary_damage,
             "Primary Accuracy": accuracy_mapping[fields["Primary Accuracy"].get()],
-            "Secondary Damage": int(fields["Secondary Damage"].get()[1:]),
+            "Secondary Damage": secondary_damage,
             "Secondary Accuracy": accuracy_mapping[fields["Secondary Accuracy"].get()],
             "Primary Attack Type": fields["Primary Attack Type"],
             "Secondary Attack Type": fields["Secondary Attack Type"],
@@ -384,13 +425,20 @@ class BattleSimulator:
 
     def save_creatures_to_file(self):
         with open("saved_creatures.json", "w") as file:
-            json.dump(self.saved_creatures, file)
+            json.dump(self.saved_creatures, file, indent=4)  
 
     def load_saved_creatures(self):
-        if os.path.exists("saved_creatures.json"):
+        try:
             with open("saved_creatures.json", "r") as file:
-                return json.load(file)
-        return {}
+                data = json.load(file)
+                if isinstance(data, dict):
+                    return data
+                else:
+                    print("Warning: Loaded data is not a dictionary.  Returning empty dictionary.")
+                    return {}
+        except (FileNotFoundError, json.JSONDecodeError):
+            print("No saved creatures found or JSON error.  Returning empty dictionary.")
+            return {}  
 
     def update_name_dropdowns(self):
         creature_names = list(self.saved_creatures.keys())
@@ -417,14 +465,14 @@ class BattleSimulator:
                 value2 = self.creature2[field].get()
                 self.creature1[field].set(value2)
                 self.creature2[field].set(value1)
-            elif isinstance(self.creature1[field], tk.Text): 
+            elif isinstance(self.creature1[field], tk.Text):
                 value1 = self.creature1[field].get("1.0", tk.END)
                 value2 = self.creature2[field].get("1.0", tk.END)
                 self.creature1[field].delete("1.0", tk.END)
                 self.creature1[field].insert(tk.END, value2)
                 self.creature2[field].delete("1.0", tk.END)
                 self.creature2[field].insert(tk.END, value1)
-            elif field == "Image Label": 
+            elif field == "Image Label":
                 image_label1 = self.creature1.get("Image Label")
                 image_label2 = self.creature2.get("Image Label")
 
@@ -435,14 +483,14 @@ class BattleSimulator:
                     image_label1.image = photo2
                     image_label2.config(image=photo1)
                     image_label2.image = photo1
-                elif image_label1: 
+                elif image_label1:
                     self.creature2["Image Label"] = image_label1
                     image_label1.grid_forget()
                     image_label1.grid(row=25, column=0, columnspan=2, pady=5)  #######################################################################
-                    del self.creature1["Image Label"]                          #
-                elif image_label2:                                             #  IMAGE NEEDS TO BE LOWEST OR WILL OVERWRITE BOXES, I kept forgeting to move them down
-                    self.creature1["Image Label"] = image_label2               #
-                    image_label2.grid_forget()                                 #
+                    del self.creature1["Image Label"]
+                elif image_label2:
+                    self.creature1["Image Label"] = image_label2
+                    image_label2.grid_forget()
                     image_label2.grid(row=25, column=0, columnspan=2, pady=5)  ######################################################################
                     del self.creature2["Image Label"]
             elif field in ["Primary Attack Type", "Secondary Attack Type", "Weakness", "Resistance"]:
